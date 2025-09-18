@@ -1,0 +1,113 @@
+services:
+#   doctree-app:
+#     container_name: doctree-app
+#     build:
+#       context: ..
+#       dockerfile: ./src/Dockerfile
+#     ports:
+#       - 3000:3000
+#     env_file:
+#       - app.env
+#     depends_on:
+#       - doctree-postgres
+#     networks:
+#       - doctree-postgres-net
+#     command: >
+#         npm run start;
+
+  doctree-postgres:
+    container_name: doctree-postgres
+    hostname: pg
+    image: postgres:17.4-alpine3.20
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=50"
+      - "-c"
+      - "shared_buffers=1GB"
+      - "-c"
+      - "effective_cache_size=4GB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=512MB"
+    env_file:
+      - pg.env
+    ports:
+      - 5432:5432
+    volumes:
+      - doctree-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+    networks:
+      - doctree-postgres-net
+  
+  doctree-minio:
+    container_name: doctree-minio
+    hostname: minio
+    image: minio/minio:RELEASE.2025-06-13T11-33-47Z
+    command: server --console-address ":${MINIO_CONSOLE_PORT}" --address ":${MINIO_PORT}" /data
+    env_file:
+      - minio.env
+    ports:
+      - ${MINIO_PORT}:${MINIO_PORT}
+      - ${MINIO_CONSOLE_PORT}:${MINIO_CONSOLE_PORT}
+    volumes:
+      - doctree-minio-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MINIO_PORT}/minio/health/live"
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - doctree-minio-net
+  
+  doctree-postgres-migrator:
+    container_name: doctree-postgres-migrator
+    hostname: pg-migrator
+    build:
+      context: ..
+      dockerfile: pkg/pgmigrator/Dockerfile
+    environment:
+      - GOOSE_MIGRATION_DIR=/migrations
+    env_file:
+      - goose.env
+    command:
+      - "goose"
+      - "up"
+    volumes:
+      - ../migrations:/migrations
+    depends_on:
+      doctree-postgres:
+        condition: service_healthy
+    networks:
+      - doctree-postgres-net
+
+volumes:
+  doctree-postgres-data:
+  doctree-minio-data:
+
+networks:
+  doctree-postgres-net:
+    driver: bridge
+  doctree-minio-net:
+    driver: bridge
+
+
+    

@@ -1,0 +1,7 @@
+**/*.env
+allure*
+./deployment/config
+!*.example.env
+**/venv
+node_modules
+dist
